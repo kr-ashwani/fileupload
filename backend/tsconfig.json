@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "typeRoots": ["./types/index.d.ts"],
+    "noEmitOnError": true,
+    "strict": true,
+    "module": "CommonJS",
+    "esModuleInterop": true,
+    "target": "ES2020",
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "outDir": "build",
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true
+  },
+  "lib": ["es2015"]
+}
