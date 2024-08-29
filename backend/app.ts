@@ -2,9 +2,10 @@ import express from "express";
 import multer from "multer";
 import StreamingFileCryptoModule from "./fileModule";
 import cors from "cors";
+import fs from "fs";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ dest: "temp/" });
 
 app.use(
   cors({
@@ -24,13 +25,11 @@ const fileCrypto = new StreamingFileCryptoModule(
 // File upload route
 app.post("/upload", upload.single("file-upload"), async (req, res) => {
   const data = req.body.metadata ? JSON.parse(req.body.metadata) : {};
-
   if (!req.file) {
     return res.status(400).send("No file uploaded.");
   }
 
   try {
-    const fileBuffer = req.file.buffer;
     const metadata = {
       originalName: data.originalname,
       mimeType: data.fileType,
@@ -38,15 +37,19 @@ app.post("/upload", upload.single("file-upload"), async (req, res) => {
       fileId: data.fileId,
     };
 
-    await fileCrypto.encryptAndSave(fileBuffer, metadata);
-    res.send("file uploaded succesfully");
+    const readStream = fs.createReadStream(req.file.path);
+    await fileCrypto.encryptAndSave(readStream, metadata);
+
+    // Clean up temp file
+    await fs.promises.unlink(req.file.path);
+
+    res.json({ fileId: metadata.fileId, message: "File uploaded successfully" });
   } catch (error) {
     console.error("Error during file upload:", error);
     res.status(500).send("Error processing file upload");
   }
 });
 
-// File download route
 app.get("/file", async (req, res) => {
   try {
     await fileCrypto.decryptAndStream(req, res);
@@ -56,7 +59,6 @@ app.get("/file", async (req, res) => {
   }
 });
 
-// Start the server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

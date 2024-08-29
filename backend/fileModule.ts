@@ -10,49 +10,51 @@ class StreamingFileCryptoModule {
   private encryptionKey: Buffer;
   private storagePath: string;
   private algorithm: string = "aes-256-cbc";
-  private iv: Buffer;
 
   constructor(encryptionKey: string, storagePath: string) {
-    // Ensure the key is exactly 32 bytes (256 bits) for AES-256-CBC
     this.encryptionKey = crypto.scryptSync(encryptionKey, "salt", 32);
     this.storagePath = storagePath;
-    this.iv = crypto.randomBytes(16);
   }
 
-  async encryptAndSave(
-    fileBuffer: Buffer,
-    metadata: {
-      originalName: string;
-      mimeType: string;
-      size: number;
-      fileId: string;
-    }
-  ) {
-    const cipher = crypto.createCipheriv(this.algorithm, this.encryptionKey, this.iv);
+  async encryptAndSave(readStream: fs.ReadStream, metadata: any): Promise<void> {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(this.algorithm, this.encryptionKey, iv);
     const filePath = path.join(this.storagePath, metadata.fileId);
     const writeStream = fs.createWriteStream(filePath);
-    await pipeline(Readable.from(fileBuffer), cipher, writeStream);
+
+    // Write IV at the beginning of the file
+    writeStream.write(iv);
+
+    await pipeline(readStream, cipher, writeStream);
   }
 
   async decryptAndStream(req: Request, res: Response): Promise<void> {
+    const fileId = req.query.fileId as string;
+    const filePath = path.join(this.storagePath, fileId);
+
+    // Read metadata
     const metadata = req.query as any;
     console.log(metadata);
-    const filePath = path.join(this.storagePath, metadata.fileId);
 
-    const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, this.iv);
     const fileStream = fs.createReadStream(filePath);
 
-    // Set appropriate headers
-    res.setHeader("Content-Type", this.getContentType(metadata.originalName));
+    // Read IV from the beginning of the file
+    const ivChunk = await new Promise<Buffer>((resolve) => {
+      fileStream.once("readable", () => {
+        resolve(fileStream.read(16));
+      });
+    });
+
+    if (!ivChunk || ivChunk.length !== 16) {
+      throw new Error("Invalid file format");
+    }
+
+    const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, ivChunk);
+
+    res.setHeader("Content-Type", mime.lookup(metadata.originalName) || "application/octet-stream");
     res.setHeader("Content-Disposition", `attachment; filename="${metadata.originalName}"`);
 
-    // Pipe the decrypted stream to the response
     await pipeline(fileStream, decipher, res);
-  }
-
-  private getContentType(fileName: string): string {
-    const ext = path.extname(fileName).toLowerCase();
-    return mime.lookup(ext);
   }
 }
 
