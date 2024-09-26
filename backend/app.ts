@@ -1,11 +1,9 @@
 import express from "express";
-import multer from "multer";
-import StreamingFileCryptoModule from "./fileModule";
 import cors from "cors";
-import fs from "fs";
+
+import { StreamingFileCryptoModule } from "./fileModule";
 
 const app = express();
-const upload = multer({ dest: "temp/" });
 
 app.use(
   cors({
@@ -14,45 +12,32 @@ app.use(
   })
 );
 
-// Initialize the StreamingFileCryptoModule
-// Replace 'your-32-byte-secret-key-in-hex' with your actual encryption key
-// Replace './encrypted-files' with the path to your encrypted files storage
 const fileCrypto = new StreamingFileCryptoModule(
-  "your-32-byte-secret-key-in-hex",
+  process.env.ENCRYPTION_KEY || "your-32-byte-secret-key-in-hex",
   "./encrypted-files"
 );
 
-// File upload route
-app.post("/upload", upload.single("file-upload"), async (req, res) => {
-  const data = req.body.metadata ? JSON.parse(req.body.metadata) : {};
-  if (!req.file) {
-    return res.status(400).send("No file uploaded.");
-  }
-
+app.post("/upload", (req, res) => {
   try {
-    const metadata = {
-      originalName: data.originalname,
-      mimeType: data.fileType,
-      size: data.size,
-      fileId: data.fileId,
-    };
-
-    const readStream = fs.createReadStream(req.file.path);
-    await fileCrypto.encryptAndSave(readStream, metadata);
-
-    // Clean up temp file
-    await fs.promises.unlink(req.file.path);
-
-    res.json({ fileId: metadata.fileId, message: "File uploaded successfully" });
+    fileCrypto.processFileAndEncrypt(req, res);
   } catch (error) {
-    console.error("Error during file upload:", error);
-    res.status(500).send("Error processing file upload");
+    console.error("Error processing file request:", error);
+    res.status(404).send("File not found or error in processing");
   }
 });
 
 app.get("/file", async (req, res) => {
   try {
     await fileCrypto.decryptAndStream(req, res);
+  } catch (error) {
+    console.error("Error processing file request:", error);
+    res.status(404).send("File not found or error in processing");
+  }
+});
+
+app.get("/download", (req, res) => {
+  try {
+    fileCrypto.handleDownload(req, res);
   } catch (error) {
     console.error("Error processing file request:", error);
     res.status(404).send("File not found or error in processing");

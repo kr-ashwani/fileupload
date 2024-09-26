@@ -8,6 +8,8 @@
 
   "dependencies": {
 
+    "busboy": "^1.6.0",
+
     "cors": "^2.8.5",
 
     "crypto": "^1.0.1",
@@ -22,9 +24,13 @@
 
   "devDependencies": {
 
+    "@types/busboy": "^1.5.4",
+
     "@types/cors": "^2.8.17",
 
     "@types/express": "^4.17.21",
+
+    "@types/mime-types": "^2.1.4",
 
     "@types/multer": "^1.4.12",
 
